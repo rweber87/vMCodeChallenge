@@ -158,6 +158,26 @@ def validate_action_has_views(row)
 	values.include?("views") ? true : false
 end
 
+# 6. how many source B conversions were there for campaigns targeting NY?
+def array_of_uniq_new_york_campaigns(hashed_data1)
+	arr = hashed_data1.select {|row| row[:audience].include?("NY")}
+	arr = arr.collect {|row| row[:campaign_id]}
+end
+
+def source_B_conversions_for_NY(hashed_data2, hashed_data1)
+	conversions = 0
+	uniq_NY_ids = array_of_uniq_new_york_campaigns(hashed_data1)
+	hashed_data2.each do |row|
+		if uniq_NY_ids.include?(row[:campaign_id])
+			actions = JSON.parse(row[:actions])
+			actions.each do |action|
+				source = action.keys.first
+				conversions += action[source] if source == "B" && action["action"] == "conversions"
+			end
+		end
+	end
+	conversions
+end
 
 # 1. what was the total spent against people with purple hair?
 	puts "1. what was the total spent against people with purple hair? $#{money_spent_on_purple(hashed_data2, hashed_data1)} spent"
@@ -170,6 +190,7 @@ end
 # 5. what was the total cost per view for all video ads, truncated to two decimal places?
 	puts "5. what was the total cost per view for all video ads, truncated to two decimal places? $#{cost_per_view_video_ads(hashed_data2)}"
 # 6. how many source B conversions were there for campaigns targeting NY?
+	puts "6. how many source B conversions were there for campaigns targeting NY? #{source_B_conversions_for_NY(hashed_data2, hashed_data1)} conversions"
 # 7. what combination of state and hair color had the best CPM?
 
 
