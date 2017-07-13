@@ -1,6 +1,5 @@
 require 'csv'
 require 'json'
-require 'pry'
 
 data_source1 = CSV.read('source1.csv', { encoding: "UTF-8", 
 								 headers: true, 
@@ -19,20 +18,21 @@ hashed_data2 = data_source2.map {|d| d.to_hash }
 ### find duplicative logic
 ### make object with one ID one audience and a sum of the impressions out of CSV source 1
 
-# 1. what was the total spent against people with purple hair?
-
-def array_of_uniq_purple_campaigns(hashed_data1)
-	#abstract for any given hair color
-	arr = hashed_data1.select {|row| row[:audience].include?("purple")}.uniq{|row| row[:campaign_id]}
+def convert_JSON_to_obj(json)
+	JSON.parse(json)
 end
 
-def money_spent_on_purple(hashed_data2, hashed_data1)
+# 1. what was the total spent against people with purple hair?
+
+def array_of_uniq_colors_campaigns(hashed_data1, hair_color)
+	arr = hashed_data1.select {|row| row[:audience].include?(hair_color)}.uniq{|row| row[:campaign_id]}
+end
+
+def money_spent_on_purple(hashed_data2, hashed_data1, hair_color)
 	money_spent = 0
-	arr_purple_campaign_ids = array_of_uniq_purple_campaigns(hashed_data1).map {|row| row[:campaign_id]}
+	arr_purple_campaign_ids = array_of_uniq_colors_campaigns(hashed_data1, hair_color).map {|row| row[:campaign_id]}
 	hashed_data2.each do |row|
-		if arr_purple_campaign_ids.include?(row[:campaign_id]) 
-			money_spent += row[:spend]
-		end
+		money_spent += row[:spend] if arr_purple_campaign_ids.include?(row[:campaign_id]) 
 	end
 	money_spent
 end
@@ -47,28 +47,16 @@ def campaign_count(hashed_data2)
 end
 
 def hash_of_campaigns_gt_4_days(hashed_data2)
-	count = 0
-	campaign_count(hashed_data2).each do |id, val|
-		val > 4 ? count += 1 : nil
-	end
-	# campaign_count(hashed_data2).select { |id, val| val > 4}.length
-	count
+	campaign_count(hashed_data2).select {|id, val| val > 4}.length
 end
 
 # 3. how many times did source H report on clicks?
 def source_h_clicks(hashed_data2)
 	clicks = 0
 	hashed_data2.each do |row|
-		action = JSON.parse(row[:actions])
-		action_data = action
+		action_data = convert_JSON_to_obj(row[:actions])
 		action_data.each do |action|
-			if action["h"] && action["action"] == "clicks"
-				clicks += action["h"]
-			elsif action["H"] && action["action"] == "clicks"
-				clicks += action["H"]
-			else
-				nil
-			end
+			action["H"] && action["action"] == "clicks" ? clicks += action["H"] : nil
 		end
 	end
 	clicks
@@ -78,10 +66,8 @@ end
 
 def more_junk_than_noise_source(hashed_data2)
 	answer_hash = {}
-	# each_with_object
 	hashed_data2.each do |row|
-		action = JSON.parse(row[:actions])
-		action_data = action
+		action_data = convert_JSON_to_obj(row[:actions])
 		action_data.each do |action_set|
 			if validate_junk(action_set)
 				source = action_set.keys.first
@@ -135,7 +121,7 @@ def cost_per_view_video_ads(hashed_data2)
 		total_views = 0
 		only_views  = 0
 		if validate_ad_type(row) && validate_action_has_views(row)
-			actions = JSON.parse(row[:actions])
+			actions = convert_JSON_to_obj(row[:actions])
 			actions.each do |action|
 				source = action.keys.first
 				total_views += action[source].to_f
@@ -156,7 +142,7 @@ def validate_ad_type(row)
 end
 
 def validate_action_has_views(row)
-	actions = JSON.parse(row[:actions])
+	actions = convert_JSON_to_obj(row[:actions])
 	values = actions.collect{ |action| action["action"]}
 	values.include?("views") ? true : false
 end
@@ -172,7 +158,7 @@ def source_B_conversions_for_NY(hashed_data2, hashed_data1)
 	uniq_NY_ids = array_of_uniq_new_york_campaigns(hashed_data1)
 	hashed_data2.each do |row|
 		if uniq_NY_ids.include?(row[:campaign_id])
-			actions = JSON.parse(row[:actions])
+			actions = convert_JSON_to_obj(row[:actions])
 			actions.each do |action|
 				source = action.keys.first
 				conversions += action[source] if source == "B" && action["action"] == "conversions"
@@ -183,7 +169,6 @@ def source_B_conversions_for_NY(hashed_data2, hashed_data1)
 end
 
 # 7. what combination of state and hair color had the best CPM? (cost of advertisement / # of impressions)
-# [{NY_purple => { data => {ids => [id1, id2, id3], impressions => sumofimpressions, ttl_spen => sumofspend }} , ] 
 def uniq_campaign_ids(hashed_data1)
 	arr = create_hash_object(hashed_data1).keys
 end
@@ -194,12 +179,17 @@ def create_state_color_hash_object(hashed_data1)
 		demograph = row[:audience].slice(0...row[:audience].length - 6)
 		id = row[:campaign_id]
 		impressions = row[:impressions]
-		if !custom_obj[demograph]
+		custom_obj = check_for_demograph(custom_obj, demograph, id, impressions, row)
+	end
+	custom_obj
+end
+
+def check_for_demograph(custom_obj, demograph, id, impressions, row)
+	if !custom_obj[demograph]
 			custom_obj[demograph] = { data: {ids: [id], impressions: impressions, ttl_spend: 0}}
-		else
-			custom_obj[demograph][:data][:ids] << row[:campaign_id]
-			custom_obj[demograph][:data][:impressions] += row[:impressions]
-		end
+	else
+		custom_obj[demograph][:data][:ids] << row[:campaign_id]
+		custom_obj[demograph][:data][:impressions] += row[:impressions]
 	end
 	custom_obj
 end
@@ -233,28 +223,22 @@ def add_cpm_to_obj(hashed_data2, hashed_data1)
 	state_color_obj
 end
 
-add_cpm_to_obj(hashed_data2, hashed_data1)
-
 def state_hair_with_best_cpm(hashed_data2, hashed_data1)
 	best_cpm_obj = nil
-	state_color_obj = add_cpm_to_obj(hashed_data2, hashed_data1)
-	state_color_obj.each do |k, v|
+	add_cpm_to_obj(hashed_data2, hashed_data1).each do |k, v|
 		best_cpm_obj = {k => v} if !best_cpm_obj || best_cpm_obj[best_cpm_obj.keys[0]][:cpm] > v[:cpm]
 	end
 	best_cpm_obj
 end
+
+hair_color = "purple"
 obj = state_hair_with_best_cpm(hashed_data2, hashed_data1)
 state = obj.keys[0].split("_")[0]
 color = obj.keys[0].split("_")[1]
 cpm = obj[obj.keys[0]][:cpm].round(2) 
 
-
-
-
-
-
 # 1. what was the total spent against people with purple hair?
-	puts "1. what was the total spent against people with purple hair? $#{money_spent_on_purple(hashed_data2, hashed_data1)} spent"
+	puts "1. what was the total spent against people with purple hair? $#{money_spent_on_purple(hashed_data2, hashed_data1, hair_color)} spent"
 # 2. how many campaigns spent on more than 4 days?
 	puts "2. how many campaigns spent on more than 4 days? #{hash_of_campaigns_gt_4_days(hashed_data2)} campaigns"
 # 3. how many times did source H report on clicks?
