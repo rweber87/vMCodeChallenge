@@ -1,5 +1,6 @@
 require 'csv'
 require 'json'
+require 'benchmark'
 
 data_source1 = CSV.read('source1.csv', { encoding: "UTF-8", 
 								 headers: true, 
@@ -235,7 +236,7 @@ hair_color = "purple"
 obj = state_hair_with_best_cpm(hashed_data2, hashed_data1)
 state = obj.keys[0].split("_")[0]
 color = obj.keys[0].split("_")[1]
-cpm = obj[obj.keys[0]][:cpm].round(2) 
+cpm = (obj[obj.keys[0]][:cpm] * 1000).round(2)
 
 # 1. what was the total spent against people with purple hair?
 	puts "1. what was the total spent against people with purple hair? $#{money_spent_on_purple(hashed_data2, hashed_data1, hair_color)} spent"
@@ -251,6 +252,13 @@ cpm = obj[obj.keys[0]][:cpm].round(2)
 	puts "6. how many source B conversions were there for campaigns targeting NY? #{source_B_conversions_for_NY(hashed_data2, hashed_data1)} conversions"
 # 7. what combination of state and hair color had the best CPM?
 	puts "7. what combination of state and hair color had the best CPM? #{state}, #{color}, $#{cpm}"
-	
-	
 
+	Benchmark.bmbm(7) do |x|
+		x.report("1. what was the total spent against people with purple hair? ") { money_spent_on_purple(hashed_data2, hashed_data1, hair_color) } 
+		x.report("2. how many campaigns spent on more than 4 days? ") { hash_of_campaigns_gt_4_days(hashed_data2) }
+		x.report("3. how many times did source H report on clicks? ") { source_h_clicks(hashed_data2) }
+		x.report("4. which sources reported more 'junk' than 'noise'? ") { more_junk_than_noise_source(hashed_data2) }
+		x.report("5. what was the total cost per view for all video ads, truncated to two decimal places? ") { cost_per_view_video_ads(hashed_data2) }
+		x.report("6. how many source B conversions were there for campaigns targeting NY? ") { source_B_conversions_for_NY(hashed_data2, hashed_data1) }
+		x.report("7. what combination of state and hair color had the best CPM? ")  { "#{state}, #{color}, $#{cpm}" }
+	end
